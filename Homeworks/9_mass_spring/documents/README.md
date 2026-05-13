@@ -83,7 +83,7 @@ $$
 \nabla E = \sum_i k (\|\mathbf{x}_i\| - L)\frac{\mathbf{x}_i}{\|\mathbf{x}_i\|} \quad(3)
 $$
 
-只要在`MassSpring.cpp`（(在文件夹[`Framework3D\submissions\assignments\mass_spring\`](../../../Framework3D/submissions/assignments/mass_spring/)中)的 `computeGrad` 函数中填上这一部分梯度的计算:
+只要在`MassSpring.cpp` 的 `computeGrad` 函数中填上这一部分梯度的计算:
 
 ```C++
 Eigen::MatrixXd MassSpring::computeGrad(double stiffness)
