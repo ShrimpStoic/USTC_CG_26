@@ -1,14 +1,9 @@
-// HW2_TODO: Please implement the abstract class Warper
-// 1. The Warper class should abstract the **mathematical mapping** involved in
-// the warping problem, **independent of image**.
-// 2. The Warper class should have a virtual function warp(...) to be called in
-// our image warping application.
-//    - You should design the inputs and outputs of warp(...) according to the
-//    mathematical abstraction discussed in class.
-//    - Generally, the warping map should map one input point to another place.
-// 3. Subclasses of Warper, IDWWarper and RBFWarper, should implement the
-// warp(...) function to perform the actual warping.
+// HW2: Abstract Warper class
+// Warps points using mathematical mappings, independent of images.
 #pragma once
+
+#include <utility>
+#include <vector>
 
 namespace USTC_CG
 {
@@ -17,8 +12,21 @@ class Warper
    public:
     virtual ~Warper() = default;
 
-    // HW2_TODO: A virtual function warp(...)
-    
-    // HW2_TODO: other functions or variables if you need
+    // Set control point pairs: source -> destination
+    void set_points(
+        const std::vector<std::pair<float, float>>& src,
+        const std::vector<std::pair<float, float>>& dst)
+    {
+        source_ = src;
+        destination_ = dst;
+    }
+
+    // Warp a single query point: given (x,y), return the mapped (x',y')
+    // Uses INVERSE mapping: for each output pixel q, find where it came from
+    virtual std::pair<float, float> warp(float x, float y) const = 0;
+
+   protected:
+    std::vector<std::pair<float, float>> source_;      // p_i
+    std::vector<std::pair<float, float>> destination_;  // q_i
 };
 }  // namespace USTC_CG

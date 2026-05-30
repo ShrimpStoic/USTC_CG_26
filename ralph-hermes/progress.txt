@@ -1,0 +1,5 @@
+USTC CG 26 — Ralph Loop Progress Log
+=====================================
+[2026-05-29 21:55] ✅ HW7-S1 + S2 完成：Blinn Phong + Normal Mapping + Shadow Mapping 全部实现
+[2026-05-29 22:00] ✅ HW9 完成：computeGrad + computeHessianSparse + 半隐式/隐式Euler全部实现
+[2026-05-29 22:05] ✅ HW8 完成：Triangle/RayBundle Embedding + RoPE + SDPA + Self/Cross-Attention 全部实现

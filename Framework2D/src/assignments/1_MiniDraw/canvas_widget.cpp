@@ -6,15 +6,21 @@
 #include "imgui.h"
 #include "shapes/line.h"
 #include "shapes/rect.h"
+#include "shapes/ellipse.h"
+#include "shapes/polygon.h"
+#include "shapes/freehand.h"
 
 namespace USTC_CG
 {
 void Canvas::draw()
 {
     draw_background();
-    // HW1_TODO: more interaction events
+    // Handle mouse click events
     if (is_hovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         mouse_click_event();
+    // Handle right-click for polygon completion
+    if (is_hovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        mouse_right_click_event();
     mouse_move_event();
     if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
         mouse_release_event();
@@ -54,7 +60,23 @@ void Canvas::set_rect()
     shape_type_ = kRect;
 }
 
-// HW1_TODO: more shape types, implements
+void Canvas::set_ellipse()
+{
+    draw_status_ = false;
+    shape_type_ = kEllipse;
+}
+
+void Canvas::set_polygon()
+{
+    draw_status_ = false;
+    shape_type_ = kPolygon;
+}
+
+void Canvas::set_freehand()
+{
+    draw_status_ = false;
+    shape_type_ = kFreehand;
+}
 
 void Canvas::clear_shape_list()
 {
@@ -100,7 +122,6 @@ void Canvas::draw_shapes()
 
 void Canvas::mouse_click_event()
 {
-    // HW1_TODO: Drawing rule for more primitives
     if (!draw_status_)
     {
         draw_status_ = true;
@@ -123,24 +144,52 @@ void Canvas::mouse_click_event()
                     start_point_.x, start_point_.y, end_point_.x, end_point_.y);
                 break;
             }
-            // HW1_TODO: case USTC_CG::Canvas::kEllipse:
+            case USTC_CG::Canvas::kEllipse:
+            {
+                current_shape_ = std::make_shared<Ellipse>(
+                    start_point_.x, start_point_.y, end_point_.x, end_point_.y);
+                break;
+            }
+            case USTC_CG::Canvas::kPolygon:
+            {
+                auto polygon = std::make_shared<Polygon>();
+                polygon->add_control_point(start_point_.x, start_point_.y);
+                polygon->add_control_point(end_point_.x, end_point_.y);
+                current_shape_ = polygon;
+                break;
+            }
+            case USTC_CG::Canvas::kFreehand:
+            {
+                auto freehand = std::make_shared<Freehand>();
+                freehand->update(start_point_.x, start_point_.y);
+                current_shape_ = freehand;
+                break;
+            }
             default: break;
         }
     }
     else
     {
-        draw_status_ = false;
-        if (current_shape_)
+        // For polygon, add new control point on left click
+        if (shape_type_ == kPolygon && current_shape_)
         {
-            shape_list_.push_back(current_shape_);
-            current_shape_.reset();
+            current_shape_->add_control_point(end_point_.x, end_point_.y);
+        }
+        else
+        {
+            // For other shapes, finish drawing
+            draw_status_ = false;
+            if (current_shape_)
+            {
+                shape_list_.push_back(current_shape_);
+                current_shape_.reset();
+            }
         }
     }
 }
 
 void Canvas::mouse_move_event()
 {
-    // HW1_TODO: Drawing rule for more primitives
     if (draw_status_)
     {
         end_point_ = mouse_pos_in_canvas();
@@ -151,9 +200,19 @@ void Canvas::mouse_move_event()
     }
 }
 
+void Canvas::mouse_right_click_event()
+{
+    // Finish polygon drawing on right-click
+    if (draw_status_ && shape_type_ == kPolygon && current_shape_)
+    {
+        draw_status_ = false;
+        shape_list_.push_back(current_shape_);
+        current_shape_.reset();
+    }
+}
+
 void Canvas::mouse_release_event()
 {
-    // HW1_TODO: Drawing rule for more primitives
 }
 
 ImVec2 Canvas::mouse_pos_in_canvas() const

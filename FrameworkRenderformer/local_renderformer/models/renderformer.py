@@ -148,17 +148,13 @@ class RenderFormer(nn.Module, PyTorchModelHubMixin):
             texture_patch_list.reshape(texture_patch_list.size(0), texture_patch_list.size(1), -1)
         ))
 
-        # ====== HW8_TODO: Implement Triangle Embedding ======
-        # Build the transformer input sequence:
-        #   1. Start with learnable register tokens (self.reg_tokens).
-        #   2. For each triangle, combine its positional encoding
-        #      (NeRF PE or RoPE), texture embedding (tri_tex_emb),
-        #      vertex normal embedding (vn_emb), and a learnable
-        #      triangle token (self.tri_token) into a single token.
-        #      Different pe_type ('nerf' vs 'rope') require different treatment.
-        #   3. Concatenate all tokens into the final sequence.
-        # ====================================================
-        raise NotImplementedError("HW8_TODO: Triangle Embedding")
+        # Triangle Embedding
+        B = batch_size
+        if self.config.pe_type == 'nerf':
+            tri_emb = self.tri_encoding_norm(self.tri_encoding_proj(self.tri_vpos_pe(tri_vpos_list)))
+            seq = torch.cat([self.reg_tokens.expand(B, -1, -1), tri_emb + tri_tex_emb + vn_emb + self.tri_token], dim=1)
+        elif self.config.pe_type == 'rope':
+            seq = torch.cat([self.reg_tokens.expand(B, -1, -1), tri_tex_emb + vn_emb + self.tri_token], dim=1)
 
         # pad triangle pos (for RoPE) and valid mask (for all)
         # use center pos for RoPE on auxiliary tokens

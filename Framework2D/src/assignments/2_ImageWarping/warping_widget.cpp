@@ -3,6 +3,9 @@
 #include <cmath>
 #include <iostream>
 
+#include "warper/IDW_warper.h"
+#include "warper/RBF_warper.h"
+
 namespace USTC_CG
 {
 using uchar = unsigned char;
@@ -156,16 +159,63 @@ void WarpingWidget::warping()
         }
         case kIDW:
         {
-            // HW2_TODO: Implement the IDW warping
-            // use selected points start_points_, end_points_ to construct the map
-            std::cout << "IDW not implemented." << std::endl;
+            // IDW warping using inverse mapping
+            IDWWarper warper;
+            std::vector<std::pair<float, float>> src, dst;
+            for (size_t i = 0; i < start_points_.size(); ++i)
+            {
+                src.push_back({start_points_[i].x, start_points_[i].y});
+                dst.push_back({end_points_[i].x, end_points_[i].y});
+            }
+            warper.set_points(src, dst);
+
+            for (int y = 0; y < data_->height(); ++y)
+            {
+                for (int x = 0; x < data_->width(); ++x)
+                {
+                    auto [sx, sy] = warper.warp(
+                        static_cast<float>(x), static_cast<float>(y));
+                    int src_x = static_cast<int>(std::round(sx));
+                    int src_y = static_cast<int>(std::round(sy));
+                    if (src_x >= 0 && src_x < data_->width() &&
+                        src_y >= 0 && src_y < data_->height())
+                    {
+                        warped_image.set_pixel(
+                            x, y, data_->get_pixel(src_x, src_y));
+                    }
+                }
+            }
             break;
         }
         case kRBF:
         {
-            // HW2_TODO: Implement the RBF warping
-            // use selected points start_points_, end_points_ to construct the map
-            std::cout << "RBF not implemented." << std::endl;
+            // RBF (Thin Plate Spline) warping using inverse mapping
+            RBFWarper warper;
+            std::vector<std::pair<float, float>> src, dst;
+            for (size_t i = 0; i < start_points_.size(); ++i)
+            {
+                src.push_back({start_points_[i].x, start_points_[i].y});
+                dst.push_back({end_points_[i].x, end_points_[i].y});
+            }
+            warper.set_points(src, dst);
+            warper.build_system();
+
+            for (int y = 0; y < data_->height(); ++y)
+            {
+                for (int x = 0; x < data_->width(); ++x)
+                {
+                    auto [sx, sy] = warper.warp(
+                        static_cast<float>(x), static_cast<float>(y));
+                    int src_x = static_cast<int>(std::round(sx));
+                    int src_y = static_cast<int>(std::round(sy));
+                    if (src_x >= 0 && src_x < data_->width() &&
+                        src_y >= 0 && src_y < data_->height())
+                    {
+                        warped_image.set_pixel(
+                            x, y, data_->get_pixel(src_x, src_y));
+                    }
+                }
+            }
             break;
         }
         default: break;

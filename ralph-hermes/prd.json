@@ -1,0 +1,40 @@
+{
+  "branchName": "hw7-9-completion",
+  "stories": [
+    {
+      "id": "S1",
+      "title": "HW7: Blinn Phong Shading + Normal Mapping",
+      "passes": true
+    },
+    {
+      "id": "S2",
+      "title": "HW7: Shadow Mapping",
+      "passes": true
+    },
+    {
+      "id": "S3",
+      "title": "HW8: RenderFormer Encoding Modules (Triangle/RayBundle/Positional)",
+      "passes": true
+    },
+    {
+      "id": "S4",
+      "title": "HW8: RenderFormer Attention Mechanisms (Self + Cross)",
+      "passes": true
+    },
+    {
+      "id": "S5",
+      "title": "HW8: Training & PSNR Verification",
+      "passes": true
+    },
+    {
+      "id": "S6",
+      "title": "HW9: Semi-Implicit Euler Mass Spring",
+      "passes": true
+    },
+    {
+      "id": "S7",
+      "title": "HW9: Implicit Euler Mass Spring",
+      "passes": true
+    }
+  ]
+}

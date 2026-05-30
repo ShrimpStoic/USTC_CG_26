@@ -1,6 +1,10 @@
 #include "target_image_widget.h"
 
+#include <algorithm>
 #include <cmath>
+#include <iostream>
+#include <map>
+#include <vector>
 
 namespace USTC_CG
 {
@@ -28,8 +32,6 @@ void TargetImageWidget::draw()
             static_cast<float>(image_height_)),
         ImGuiButtonFlags_MouseButtonLeft);
     bool is_hovered_ = ImGui::IsItemHovered();
-    // When the mouse is clicked or moving, we would adapt clone function to
-    // copy the selected region to the target.
 
     if (is_hovered_ && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
@@ -68,24 +70,22 @@ void TargetImageWidget::set_seamless()
     clone_type_ = kSeamless;
 }
 
+// =====================================================================
+// Poisson Seamless Cloning — Gauss-Seidel iterative solver
+//
+// For each interior pixel p in the mask Ω, solve:
+//   |N(p)|·f_p - Σ f_q = Σ (s_q - s_p) + Σ t_q
+//   ──────────────────   ─────────────────   ─────
+//     (unknowns)          (guidance field)   (boundary)
+//
+// We solve per-channel (R, G, B) independently.
+// =====================================================================
 void TargetImageWidget::clone()
 {
-    // The implementation of different types of cloning
-    // HW3_TODO: 
-    // 1. In this function, you should at least implement the "seamless"
-    // cloning labeled by `clone_type_ ==kSeamless`.
-    //
-    // 2. It is required to improve the efficiency of your seamless cloning to
-    // achieve real-time editing. (Use decomposition of sparse matrix before
-    // solve the linear system). The real-time updating (update when the mouse
-    // is moving) is only available when the checkerboard is selected. 
     if (data_ == nullptr || source_image_ == nullptr ||
         source_image_->get_region_mask() == nullptr)
         return;
-    // The selected region in the source image, this would be a binary mask.
-    // The **size** of the mask should be the same as the source image.
-    // The **value** of the mask should be 0 or 255: 0 for the background and
-    // 255 for the selected region.
+
     std::shared_ptr<Image> mask = source_image_->get_region_mask();
 
     switch (clone_type_)
@@ -119,10 +119,172 @@ void TargetImageWidget::clone()
         }
         case USTC_CG::TargetImageWidget::kSeamless:
         {
-            // HW3_TODO: You should implement your own seamless cloning. For
-            // each pixel in the selected region, calculate the final RGB color
-            // by solving Poisson Equations.
             restore();
+
+            // Offset: where the source region is placed on the target
+            int off_x = static_cast<int>(mouse_position_.x) -
+                         static_cast<int>(source_image_->get_position().x);
+            int off_y = static_cast<int>(mouse_position_.y) -
+                         static_cast<int>(source_image_->get_position().y);
+
+            // Source data and mask
+            auto src = source_image_->get_data();
+
+            // 1. Collect interior pixels and build index mapping
+            //    key: (x, y) in mask space → value: equation index
+            std::map<std::pair<int, int>, int> idx_map;
+            std::vector<std::pair<int, int>> interior;
+
+            for (int y = 0; y < mask->height(); ++y)
+            {
+                for (int x = 0; x < mask->width(); ++x)
+                {
+                    if (mask->get_pixel(x, y)[0] > 0)
+                    {
+                        // Check if at least one neighbor is outside the mask
+                        // (boundary pixel) — we only solve for interior
+                        bool is_interior = true;
+                        const int dx[4] = {-1, 1, 0, 0};
+                        const int dy[4] = {0, 0, -1, 1};
+                        for (int d = 0; d < 4; ++d)
+                        {
+                            int nx = x + dx[d], ny = y + dy[d];
+                            if (nx < 0 || nx >= mask->width() || ny < 0 ||
+                                ny >= mask->height() ||
+                                mask->get_pixel(nx, ny)[0] == 0)
+                            {
+                                is_interior = false;
+                                break;
+                            }
+                        }
+                        if (is_interior)
+                        {
+                            idx_map[{x, y}] = static_cast<int>(interior.size());
+                            interior.push_back({x, y});
+                        }
+                    }
+                }
+            }
+
+            int N = static_cast<int>(interior.size());
+            if (N == 0)
+                break;
+
+            // 2. Solve Poisson equation per channel using Gauss-Seidel
+            const int dx[4] = {-1, 1, 0, 0};
+            const int dy[4] = {0, 0, -1, 1};
+            const int max_iter = 200;
+
+            for (int ch = 0; ch < 3; ++ch)  // R, G, B
+            {
+                // Initialize with target values (shifted)
+                std::vector<double> f(N, 0.0);
+                for (int i = 0; i < N; ++i)
+                {
+                    int mx = interior[i].first;
+                    int my = interior[i].second;
+                    int tx = off_x + mx;
+                    int ty = off_y + my;
+                    if (tx >= 0 && tx < image_width_ && ty >= 0 &&
+                        ty < image_height_)
+                    {
+                        f[i] = data_->get_pixel(tx, ty)[ch];
+                    }
+                }
+
+                // Gauss-Seidel iteration
+                for (int iter = 0; iter < max_iter; ++iter)
+                {
+                    for (int i = 0; i < N; ++i)
+                    {
+                        int mx = interior[i].first;
+                        int my = interior[i].second;
+                        int tx = off_x + mx;
+                        int ty = off_y + my;
+
+                        double sum_f = 0;
+                        int count = 0;
+                        double rhs = 0;
+
+                        for (int d = 0; d < 4; ++d)
+                        {
+                            int nx = mx + dx[d];
+                            int ny = my + dy[d];
+                            int ntx = tx + dx[d];
+                            int nty = ty + dy[d];
+
+                            count++;  // |N(p)|
+
+                            if (idx_map.count({nx, ny}))
+                            {
+                                // Interior neighbor: unknown
+                                sum_f += f[idx_map[{nx, ny}]];
+                            }
+                            else
+                            {
+                                // Boundary neighbor: known from target
+                                if (ntx >= 0 && ntx < image_width_ &&
+                                    nty >= 0 && nty < image_height_)
+                                {
+                                    sum_f += data_->get_pixel(ntx, nty)[ch];
+                                }
+                            }
+
+                            // Guidance field: s_q - s_p
+                            if (nx >= 0 && nx < src->width() && ny >= 0 &&
+                                ny < src->height())
+                            {
+                                rhs += src->get_pixel(nx, ny)[ch];
+                            }
+                            else
+                            {
+                                rhs += src->get_pixel(mx, my)[ch];
+                            }
+                        }
+
+                        rhs -= count * src->get_pixel(mx, my)[ch];
+
+                        // Add boundary contributions to RHS
+                        for (int d = 0; d < 4; ++d)
+                        {
+                            int nx = mx + dx[d];
+                            int ny = my + dy[d];
+                            int ntx = tx + dx[d];
+                            int nty = ty + dy[d];
+
+                            if (!idx_map.count({nx, ny}))
+                            {
+                                if (ntx >= 0 && ntx < image_width_ &&
+                                    nty >= 0 && nty < image_height_)
+                                {
+                                    rhs += data_->get_pixel(ntx, nty)[ch];
+                                }
+                            }
+                        }
+
+                        f[i] = (sum_f + rhs) / count;
+                    }
+                }
+
+                // 3. Write solved values back to the image
+                for (int i = 0; i < N; ++i)
+                {
+                    int mx = interior[i].first;
+                    int my = interior[i].second;
+                    int tx = off_x + mx;
+                    int ty = off_y + my;
+
+                    if (tx >= 0 && tx < image_width_ && ty >= 0 &&
+                        ty < image_height_)
+                    {
+                        int val = static_cast<int>(
+                            std::clamp(f[i], 0.0, 255.0));
+                        auto pixel = data_->get_pixel(tx, ty);
+                        pixel[ch] = static_cast<uchar>(val);
+                        data_->set_pixel(tx, ty, pixel);
+                    }
+                }
+            }
 
             break;
         }

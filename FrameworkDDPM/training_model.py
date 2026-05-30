@@ -10,14 +10,28 @@ import cv2 as cv
 
 logging.basicConfig(level=logging.INFO)
 
-# TODO: 完成训练过程的Loss计算
-# 加噪过程需要补充forward_diffusion_sample中内容，并调用
+
 def get_loss(model, x_0, t, device):
+    """
+    Compute the DDPM training loss.
+    
+    Loss = E[||epsilon - epsilon_theta(x_t, t)||^2]
+    
+    where:
+    - epsilon is the actual noise added
+    - epsilon_theta is the model's predicted noise
+    - x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon
+    """
+    # Forward diffusion: add noise to x_0 at timestep t
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     
-    # DO STH...
+    # Model predicts the noise
+    noise_pred = model(x_noisy, t)
     
-    return None
+    # MSE loss between predicted and actual noise
+    loss = F.mse_loss(noise, noise_pred)
+    
+    return loss
 
 
 if __name__ == "__main__":
@@ -28,8 +42,7 @@ if __name__ == "__main__":
 
     dataloader = load_transformed_dataset(batch_size=BATCH_SIZE)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    # device = "cpu"
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
     logging.info(f"Using device: {device}")
     model.to(device)
     optimizer = Adam(model.parameters(), lr=1e-4)
@@ -38,11 +51,17 @@ if __name__ == "__main__":
         for batch_idx, (batch, _) in enumerate(dataloader):
             optimizer.zero_grad()
 
-            # TODO: 完成对时间步的采样、Loss计算以及反向传播
-            loss = 0
+            # Sample random timesteps for each image in the batch
+            t = torch.randint(0, T, (batch.shape[0],), device=device).long()
+            
+            # Compute loss
+            loss = get_loss(model, batch, t, device)
+            
+            # Backpropagation
+            loss.backward()
             optimizer.step()
 
             if batch_idx % 50 == 0:
-                logging.info(f"Epoch {epoch} | Batch index {batch_idx:03d} Loss: {loss.item()}")
+                logging.info(f"Epoch {epoch} | Batch index {batch_idx:03d} Loss: {loss.item():.6f}")
 
     torch.save(model.state_dict(), f"./ddpm_mse_epochs_{epochs}.pth")
